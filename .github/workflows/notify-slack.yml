@@ -1,0 +1,40 @@
+name: Notify Nikkei to Slack
+
+on:
+  push:
+    paths:
+      - 'data/nikkei.json'
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read nikkei data and post to Slack
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          DATA=$(cat data/nikkei.json)
+          DATE=$(echo "$DATA" | jq -r '.date')
+          PRICE=$(echo "$DATA" | jq -r '.price')
+          CHANGE=$(echo "$DATA" | jq -r '.change')
+          PERCENT=$(echo "$DATA" | jq -r '.change_percent')
+          SOURCE=$(echo "$DATA" | jq -r '.source')
+
+          if (( $(echo "$CHANGE >= 0" | bc -l) )); then
+            SIGN="+"
+            EMOJI="📈"
+          else
+            SIGN=""
+            EMOJI="📉"
+          fi
+
+          FORMATTED_PRICE=$(printf "%'.2f" "$PRICE")
+          FORMATTED_CHANGE=$(printf "%'+.2f" "$CHANGE")
+
+          TEXT="${EMOJI} 日経平均株価（${DATE} 時点）\n\n終値/現在値: ${FORMATTED_PRICE} 円\n前日比: ${FORMATTED_CHANGE} 円（${SIGN}${PERCENT}%）\n\n出典: ${SOURCE}"
+
+          curl -X POST -H 'Content-type: application/json' \
+            --data "{\"text\": \"${TEXT}\"}" \
+            "$SLACK_WEBHOOK_URL"
